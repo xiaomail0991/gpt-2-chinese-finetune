@@ -1,6 +1,6 @@
 import os
 
-os.system('pip install transformers')
+#os.system('pip install transformers')
 import transformers
 import torch
 import os
@@ -10,7 +10,8 @@ import numpy as np
 from datetime import datetime
 from torch.nn import DataParallel
 from tqdm import tqdm
-
+import torch
+from pytorch_pretrained_bert import BertTokenizer, BertModel, BertForMaskedLM
 
 # from transformers import get_linear_schedule_with_warmup as
 
@@ -40,6 +41,7 @@ def main():
     # drive.mount('/content/drive/')
     # path = '/content/drive/My Drive/Colab Notebooks'
     # os.chdir(path)
+    '''
     import moxing as mox
     mox.file.make_dirs('/cache')
     mox.file.copy_parallel('obs://ghost-story/ghost/nlpdata/config/model_config_small.json',
@@ -51,19 +53,20 @@ def main():
     mox.file.copy_parallel('obs://ghost-story/ghost/nlpdata/data/tokenization/', '/cache/data/tokenization/')
     mox.file.copy_parallel('obs://ghost-story/ghost/nlpdata/model/', '/cache/data/model/')
     mox.file.copy_parallel('obs://ghost-story/ghost/', '/cache/data/model/')
-
+    args = parser.parse_args()
+    args, unparsed = parser.parse_known_args()
+  '''
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', default='0,1,2,3', type=str, required=False, help='设置使用哪些显卡')
-    parser.add_argument('--model_config', default='obs://ghost/nlpdata/config/model_config_small.json', type=str,
+    parser.add_argument('--model_config', default='/content/gpt-2-chinese-finetune/nlpdata/config/model_config_small.json', type=str,
                         required=False,
                         help='选择模型参数')
-    parser.add_argument('--tokenizer_path', default='obs://ghost-story/ghost/nlpdata/cache/vocab_small.txt', type=str,
+    parser.add_argument('--tokenizer_path', default='/content/gpt-2-chinese-finetune/nlpdata/cache/vocab_small.txt', type=str,
                         required=False,
                         help='选择词库')
-    parser.add_argument('--raw_data_path', default='obs://ghost-story/ghost/nlpdata/ghost.json', type=str,
+    parser.add_argument('--raw_data_path', default='/content/gpt-2-chinese-finetune/nlpdata/ghost.json', type=str,
                         required=False, help='原始训练语料')
-    parser.add_argument('--tokenized_data_path', default='obs://ghost-story/ghost/nlpdata/data/tokenization', type=str,
-                        required=False,
+    parser.add_argument('--tokenized_data_path', default='/content/gpt-2-chinese-finetune/nlpdata/',
                         help='tokenized语料存放位置')
     parser.add_argument('--raw', action='store_true', help='是否先做tokenize')
     parser.add_argument('--epochs', default=50, type=int, required=False, help='训练循环')
@@ -78,12 +81,12 @@ def main():
     parser.add_argument('--max_grad_norm', default=1.0, type=float, required=False)
     parser.add_argument('--num_pieces', default=1, type=int, required=False, help='将训练语料分成多少份')
     #     parser.add_argument('--output_dir', default='obs://ghost-story/ghost/nlpdata/model/', type=str, required=False, help='模型输出路径')
-    parser.add_argument('--pretrained_model', default='obs://ghost-story/ghost/', type=str, required=False,
+    parser.add_argument('--pretrained_model', default='args = /content/gpt-2-chinese-finetune/nlpdata/cache', type=str, required=False,
                         help='模型训练起点路径')
     parser.add_argument('--segment', action='store_true', help='中文以词为单位')
 
-    #     args = parser.parse_args()
-    args, unparsed = parser.parse_known_args()
+    args = parser.parse_args()
+    #args, unparsed = parser.parse_known_args()
     print('args:\n' + args.__repr__())
 
     # if args.segment:
@@ -94,19 +97,20 @@ def main():
     os.environ["CUDA_VISIBLE_DEVICES"] = args.device  # 此处设置程序使用哪些显卡
     #     model_config = transformers.modeling_gpt2.GPT2Config.from_json_file(args.model_config)
     #     model_config = transformers.modeling_gpt2.GPT2Config.from_json_file(mox.file.read('/cache/config/model_config_small.json'))
-    model_config = transformers.modeling_gpt2.GPT2Config.from_json_file('/cache/config/model_config_small.json')
+    model_config = transformers.modeling_gpt2.GPT2Config.from_json_file('/content/gpt-2-chinese-finetune/nlpdata/config/model_config_small.json')
+    
     print('config:\n' + model_config.to_json_string())
 
     n_ctx = model_config.n_ctx
     #     full_tokenizer = Tokenization.BertTokenizer(vocab_file=args.tokenizer_path)
     #     full_tokenizer = BertTokenizer(vocab_file=args.tokenizer_path)
-    full_tokenizer = BertTokenizer(vocab_file='/cache/cache/vocab_small.txt')
+    full_tokenizer = BertTokenizer(vocab_file='/content/gpt-2-chinese-finetune/nlpdata/cache/vocab_small.txt')
     full_tokenizer.max_model_input_sizes = 999999
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print('using device:', device)
 
-    raw_data_path = '/cache/ghost.json'
-    tokenized_data_path = '/cache/data/tokenization/'
+    raw_data_path = '/content/gpt-2-chinese-finetune/nlpdata/ghost.json'
+    tokenized_data_path = '/content/gpt-2-chinese-finetune/nlpdata/cache/'
     # raw = args.raw  # 选择是否从零开始构建数据集
     raw = True
     epochs = args.epochs
@@ -120,7 +124,7 @@ def main():
     fp16_opt_level = args.fp16_opt_level
     max_grad_norm = args.max_grad_norm
     num_pieces = args.num_pieces
-    output_dir = '/cache/data/model/'
+    output_dir = '/content/gpt-2-chinese-finetune/nlpdata/cache/'
 
     if raw:
         print('building files')
@@ -234,7 +238,7 @@ def main():
             os.mkdir(output_dir + 'model_epoch{}'.format(epoch + 1))
         model_to_save = model.module if hasattr(model, 'module') else model
         model_to_save.save_pretrained(output_dir + 'model_epoch{}'.format(epoch + 1))
-        mox.file.copy_parallel(output_dir + 'model_epoch{}'.format(epoch + 1), 'obs://ghost-story/ghost/nlpdata/model/')
+        #mox.file.copy_parallel(output_dir + 'model_epoch{}'.format(epoch + 1), '/content/gpt-2-chinese-finetune/nlpdata/model/')
         # torch.save(scheduler.state_dict(), output_dir + 'model_epoch{}/scheduler.pt'.format(epoch + 1))
         # torch.save(optimizer.state_dict(), output_dir + 'model_epoch{}/optimizer.pt'.format(epoch + 1))
         print('epoch {} finished'.format(epoch + 1))
@@ -248,9 +252,9 @@ def main():
         os.mkdir(output_dir + 'final_model')
     model_to_save = model.module if hasattr(model, 'module') else model
     model_to_save.save_pretrained(output_dir + 'final_model')
-    mox.file.copy_parallel(output_dir + 'final_model', 'obs://ghost-story/ghost/nlpdata/model/')
-    # torch.save(scheduler.state_dict(), output_dir + 'final_model/scheduler.pt')
-    # torch.save(optimizer.state_dict(), output_dir + 'final_model/optimizer.pt')
+    #mox.file.copy_parallel(output_dir + 'final_model', 'obs://ghost-story/ghost/nlpdata/model/')
+    #torch.save(scheduler.state_dict(), output_dir + 'final_model/scheduler.pt')
+    #torch.save(optimizer.state_dict(), output_dir + 'final_model/optimizer.pt')
 
 
 if __name__ == '__main__':
